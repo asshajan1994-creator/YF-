@@ -1,0 +1,59 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: farmbrain
+      POSTGRES_PASSWORD: farmbrain
+      POSTGRES_DB: farmbrain
+    ports:
+      - "5432:5432"
+    volumes:
+      - farmbrain_db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U farmbrain -d farmbrain"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgresql+asyncpg://farmbrain:farmbrain@db:5432/farmbrain
+      REDIS_URL: redis://redis:6379/0
+      SECRET_KEY: change-me-in-production
+      BACKEND_CORS_ORIGINS: '["http://localhost:3000"]'
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+
+  frontend:
+    build: ./frontend
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000/api/v1
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+
+volumes:
+  farmbrain_db:
